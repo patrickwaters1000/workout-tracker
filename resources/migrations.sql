@@ -1,0 +1,30 @@
+CREATE TABLE IF NOT EXISTS workouts (
+  id INT GENERATED ALWAYS AS IDENTITY,
+  date TIMESTAMP NOT NULL,
+  note VARCHAR,
+PRIMARY KEY(id)
+);
+
+CREATE TABLE IF NOT EXISTS exercises (
+  id INT GENERATED ALWAYS AS IDENTITY,
+  workout_id INT NOT NULL,
+  name VARCHAR NOT NULL,
+  note VARCHAR,
+PRIMARY KEY(id),
+CONSTRAINT fk_workout_id
+  FOREIGN KEY(workout_id)
+  REFERENCES workouts(id)
+);
+
+CREATE TABLE IF NOT EXISTS metrics (
+  id INT GENERATED ALWAYS AS IDENTITY,
+  exercise_id INT NOT NULL,
+  name VARCHAR NOT NULL,
+  value REAL NOT NULL,
+  unit VARCHAR,
+  note VARCHAR,
+PRIMARY KEY(id),
+CONSTRAINT fk_exercise_id
+  FOREIGN KEY(exercise_id)
+  REFERENCES exercises(id)
+);
