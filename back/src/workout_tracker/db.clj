@@ -3,43 +3,45 @@
     [clj-time.core :as t]
     [clojure.java.io :as io]
     [clojure.java.jdbc :as jdbc]
-    [stencil.core :as stencil]))
+    [stencil.core :as stencil]
+    [workout-tracker.metrics :as m]))
 
 (def db {:user "pwaters"
          :dbtype "postgresql"
          :dbname "workout_tracker"})
 
-(defn insert-workout! [db]
-  (let [date (subs (str (t/now)) 0 10)
-        template (slurp (io/resource "insert_workout.sql"))
-        sql (stencil/render-string template {:DATE date})]
+(defn insert-workout! [db row]
+  (let [{:keys [type date]} row
+        template (slurp (io/resource "sql/insert_workout.sql"))
+        sql (stencil/render-string template {:DATE date
+                                             :TYPE type})]
     (jdbc/execute! db sql)))
 
 (defn insert-exercise! [db row]
   (let [{:keys [workout-id
-                exercise-type]} row
-        template (slurp (io/resource "insert_exercise.sql"))
+                type]} row
+        template (slurp (io/resource "sql/insert_exercise.sql"))
         sql (stencil/render-string template
                                    {:WORKOUT_ID workout-id
-                                    :TYPE exercise-type})]
+                                    :TYPE type})]
     (jdbc/execute! db sql)))
 
 (defn insert-metric! [db row]
   (let [{:keys [exercise-id
-                metric-name
+                name
                 value
                 unit]} row
-        template (slurp (io/resource "insert_metric.sql"))
+        template (slurp (io/resource "sql/insert_metric.sql"))
         sql (stencil/render-string template
                                    {:EXERCISE_ID exercise-id
-                                    :NAME metric-name
+                                    :NAME name
                                     :VALUE value
                                     :UNIT unit})]
     (jdbc/execute! db sql)))
 
 (defn assoc-metrics [exercise-id->metrics exercise]
   (let [exercise-id (:id exercise)
-        metrics (get exercise-id->metrics exercise-id)]
+        metrics (m/load-metrics (get exercise-id->metrics exercise-id))]
     (assoc exercise :metrics metrics)))
 
 (defn assoc-exercises [workout-id->exercises exercise-id->metrics workout]
