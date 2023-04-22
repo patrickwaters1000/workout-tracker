@@ -3,6 +3,7 @@
     [cheshire.core :as json]
     [clojure.java.io :as io]
     [clojure.string :as string]
+    [clojure.walk :refer [keywordize-keys]]
     [compojure.core :refer :all]
     [org.httpkit.server :refer [run-server]]
     [ring.middleware.params :as rmp]
@@ -31,10 +32,15 @@
 (defroutes app
   (GET "/" [] (slurp "resources/html/index.html"))
   (GET "/index.js" [] (slurp "resources/js/index.js"))
-  (GET "/workouts-table" []
+  (GET "/runs" []
     (json/generate-string
-      {:tableHeaders runs/workouts-table-columns
-       :tableBody (runs/get-run-workouts-table @workouts-data)})))
+      {:runs (runs/get-run-workouts-table @workouts-data)}))
+  (POST "/add-run" {body :body}
+    (let [m (keywordize-keys (json/parse-string (slurp body)))]
+      (runs/add-run! db/db m)
+      (reset! workouts-data (db/get-data db/db))
+      (json/generate-string
+        {:runs (runs/get-run-workouts-table @workouts-data)}))))
 
 (defn -main [& _]
   (println "Ready!")

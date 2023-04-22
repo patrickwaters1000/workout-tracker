@@ -15,7 +15,10 @@
         template (slurp (io/resource "sql/insert_workout.sql"))
         sql (stencil/render-string template {:DATE date
                                              :TYPE type})]
-    (jdbc/execute! db sql)))
+    (jdbc/execute! db sql)
+    (->> (jdbc/query db "SELECT max(id) AS id FROM workouts")
+         first
+         :id)))
 
 (defn insert-exercise! [db row]
   (let [{:keys [workout-id
@@ -24,7 +27,10 @@
         sql (stencil/render-string template
                                    {:WORKOUT_ID workout-id
                                     :TYPE type})]
-    (jdbc/execute! db sql)))
+    (jdbc/execute! db sql)
+    (->> (jdbc/query db "SELECT max(id) AS id FROM exercises")
+         first
+         :id)))
 
 (defn insert-metric! [db row]
   (let [{:keys [exercise-id
