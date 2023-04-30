@@ -57,7 +57,7 @@
         seconds (Double/parseDouble seconds-str)]
     (+ minutes (/ seconds 60.0))))
 
-(defn- get-run-metrics [exercise-id m]
+(defn- get-run-metrics [m]
   (let [distance (Double/parseDouble (:distance m))
         pace (parse-pace (:pace m))
         time (* pace distance)
@@ -69,26 +69,35 @@
           {:name "time" :unit "minutes" :value time}
           (when heart-beats
             {:name "heart-beats" :value heart-beats})]
-         (remove nil?)
-         (map #(assoc % :exercise-id exercise-id)))))
+         (remove nil?))))
 
-(defn- add-interval! [db workout-id interval]
+(defn- add-interval! [db workout-id interval-metrics]
   (let [exercise-id (db/insert-exercise! db {:workout-id workout-id
-                                             :type "interval"})
-        metrics (get-run-metrics exercise-id interval)]
-    (run! #(db/insert-metric! db %) metrics)))
+                                             :type "interval"})]
+    (->> interval-metrics
+         (map #(assoc % :exercise-id exercise-id))
+         (run! #(db/insert-metric! db %)))))
 
 (defn add-run! [db m]
+  {:pre [(valid-date? (:date m))]}
   (let [{:keys [date
                 intervals]} m
+        run-metrics (get-run-metrics m)
+        ;; Do this before any insertions. If the input is invalid, we won't
+        ;; insert anything.
+        interval-metrics (mapv get-run-metrics intervals)
         workout-id (db/insert-workout! db {:type "run"
                                            :date date})
         run-exercise-id (db/insert-exercise! db {:workout-id workout-id
-                                                 :type "run"})
-        run-metrics (get-run-metrics run-exercise-id m)]
-    (println m)
-    (assert (valid-date? date))
-    (run! #(db/insert-metric! db %) run-metrics)
+                                                 :type "run"})]
+    (->> run-metrics
+         (map #(assoc % :exercise-id run-exercise-id))
+         (run! #(db/insert-metric! db %)))
     (when-not (empty? intervals)
       (run! #(add-interval! db workout-id %)
             intervals))))
+
+(comment
+  (db/get-data db/db)
+  ;;
+  )

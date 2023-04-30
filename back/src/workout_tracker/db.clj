@@ -43,7 +43,9 @@
                                     :NAME name
                                     :VALUE value
                                     :UNIT unit})]
-    (jdbc/execute! db sql)))
+    (try (jdbc/execute! db sql)
+         (catch Exception e
+           (throw (Exception. sql))))))
 
 (defn assoc-metrics [exercise-id->metrics exercise]
   (let [exercise-id (:id exercise)
