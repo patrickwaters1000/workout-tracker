@@ -34,13 +34,17 @@
   (GET "/index.js" [] (slurp "resources/js/index.js"))
   (GET "/runs" []
     (json/generate-string
-      {:runs (runs/get-run-workouts-table @workouts-data)}))
+      {:runs (runs/get-run-workouts @workouts-data)}))
+  (GET "/running-distance-plot" []
+    (json/generate-string
+      (runs/get-distance-plot @workouts-data)))
   (POST "/add-run" {body :body}
     (let [m (keywordize-keys (json/parse-string (slurp body)))]
+      (println m)
       (runs/add-run! db/db m)
       (reset! workouts-data (db/get-data db/db))
       (json/generate-string
-        {:runs (runs/get-run-workouts-table @workouts-data)}))))
+        {:runs (runs/get-run-workouts @workouts-data)}))))
 
 (defn -main [& _]
   (println "Ready!")

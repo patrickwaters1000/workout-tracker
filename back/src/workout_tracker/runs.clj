@@ -1,9 +1,13 @@
 (ns workout-tracker.runs
   (:require
+    [clj-time.core :as t]
+    [clj-time.periodic :as tp]
     [clojure.string :as string]
     [workout-tracker.db :as db]
     [workout-tracker.metrics :as m]
-    [workout-tracker.utils :refer [get-unique]]))
+    [workout-tracker.utils :as u])
+  (:import
+    (org.joda.time DateTime)))
 
 (defn- get-metric [metric exercise]
   (get-in exercise [:metrics metric]))
@@ -16,10 +20,7 @@
        :pace (/ time distance)})))
 
 (defn- format-intervals [intervals]
-  (->> intervals
-       (map (fn [{:keys [distance pace]}]
-              (format "%.2f mi @ %s" distance (m/format-time pace))))
-       (string/join ",")))
+  (map #(update % :pace m/format-time) intervals))
 
 (defn- get-run-workouts-row [workout]
   (let [date (:date workout)
@@ -36,17 +37,53 @@
                        (filter #(= "interval" (:type %)))
                        (map process-interval)
                        (remove nil?))]
-    [date
-     (format "%.2f" distance)
-     (m/format-time (/ time distance))
-     (if-not heart-rate "" (format "%d" heart-rate))
-     (if (empty? intervals) "" (format-intervals intervals))]))
+    {:date date
+     :distance distance
+     :pace (/ time distance)
+     :heartRate heart-rate
+     :intervals intervals}))
 
-(defn get-run-workouts-table [workouts]
+(defn get-run-workouts [workouts]
   (->> workouts
        (filter #(= "run" (:type %)))
        (sort-by :date)
        (map get-run-workouts-row)))
+
+(defn week [date-str]
+  (let [date-1 (DateTime. "2023-01-02") ;; First Monday of 2023.
+        date-2 (DateTime. date-str)
+        week-idx (if (t/before? date-1 date-2)
+                   (t/in-weeks (t/interval date-1 date-2))
+                   (- (inc (t/in-weeks (t/interval date-2 date-1)))))]
+    (if (neg? week-idx)
+      (t/minus date-1 (t/weeks (Math/abs week-idx)))
+      (t/plus date-1 (t/weeks week-idx)))))
+
+(defn smooth-date [row]
+  (for [num-days [-2 1 0 1 2]
+        :let [update-date-fn (if (pos? num-days)
+                               #(t/plus % (t/days num-days))
+                               #(t/minus % (t/days (Math/abs num-days))))]]
+    (-> row
+        (update :date update-date-fn)
+        (update :distance / 5.0))))
+
+(defn get-distance-plot [workouts]
+  (let [week->distance (->> (get-run-workouts workouts)
+                            (map (fn [row] (update row :date #(DateTime. %))))
+                            (mapcat smooth-date)
+                            (group-by (comp week :date))
+                            (u/map-vals (fn [rows]
+                                          (->> rows
+                                               (map :distance)
+                                               (reduce + 0.0)))))
+        observed-weeks (sort (keys week->distance))
+        dates (tp/periodic-seq (first observed-weeks)
+                               (t/plus (last observed-weeks)
+                                       (t/weeks 1))
+                               (t/weeks 1))
+        distances (map #(get week->distance % 0.0) dates)]
+    {:date (map #(subs (str %) 0 10) dates) :distance distances}))
 
 (defn valid-date? [date-str]
   (some? (re-matches #"\d{4,4}\-\d{2,2}\-\d{2,2}" date-str)))
@@ -95,9 +132,15 @@
          (run! #(db/insert-metric! db %)))
     (when-not (empty? intervals)
       (run! #(add-interval! db workout-id %)
-            intervals))))
+            interval-metrics))))
 
 (comment
-  (db/get-data db/db)
+  (get-distance-plot (db/get-data db/db))
+  (->> (db/get-data db/db)
+       (get-run-workouts)
+       (map (fn [row] (update row :date #(DateTime. %))))
+       ;;(mapcat smooth-date)
+       (group-by (comp week :date))
+       (sort-by key))
   ;;
   )
